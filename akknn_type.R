@@ -3,29 +3,31 @@
 
 libs<-c("tm","plyr","class","kknn")
 lapply(libs,require,character.only=TRUE)
-
+#packages are saved as strings so in order to use require function we need 'character.only' 
 # set options
 options(stringsAsFactors = FALSE)
-path<-"your path"
+path<-getwd()
+# save the current working directory 
 
 
-source(paste(path,"kknn.ordinal.R",sep=""))
-load(paste(path,"dat.RData",sep=""))
+source(paste(path,"/kknn.ordinal.R",sep=""))
+load(paste(path,"/dat.RData",sep=""))
+# to run source and load functions accurately, '/' is applied.
 
 
-
-# set parameters
-
-mstone<-"2013-05-01"
+# set paramete
+mstone<-"2012-01-01"
+# in the paper, the start date of collecting the data is 2012/01/01
   
-  dir.create(paste(path,mstone,sep=""))
-  dir.create(paste(path,mstone,"/0",sep=""))
-  dir.create(paste(path,mstone,"/1",sep=""))
-  dir.create(paste(path,mstone,"/2",sep=""))
-  dir.create(paste(path,mstone,"/3",sep=""))
-  dir.create(paste(path,mstone,"/4",sep=""))
-  dir.create(paste(path,mstone,"/5",sep=""))
-  
+  dir.create(paste(path,"/output",sep=""))
+  dir.create(paste(path,"/output/",mstone,sep=""))
+  dir.create(paste(path,"/output/",mstone,"/0",sep=""))
+  dir.create(paste(path,"/output/",mstone,"/1",sep=""))
+  dir.create(paste(path,"/output/",mstone,"/2",sep=""))
+  dir.create(paste(path,"/output/",mstone,"/3",sep=""))
+  dir.create(paste(path,"/output/",mstone,"/4",sep=""))
+  dir.create(paste(path,"/output/",mstone,"/5",sep=""))
+# after making folder, output, then remainder folders are made in output folder.  
   no.levels<-c()
   dat_lv0=c()
   dat_lv15=c()
@@ -33,28 +35,26 @@ mstone<-"2013-05-01"
     
     level<-dat[dat$level==lv,]
     
-    level$Date<-as.Date(substr(as.character(level$Date),1,8),"%Y%m%d")
+    level$Date<-as.Date(level$Date,"%Y%m%d")
+    # already level$Date is character so as.character is not needed.
     level<-level[level$Date>=mstone,]
-    #level<-level[level$type=="Flash Flood"]
+  
     if(lv==0) dat_lv0=rbind(dat_lv0,level)
     if(lv>0) dat_lv15=rbind(dat_lv15,level)
+    # to classify the data accordding to level.  
     no.levels<-c(no.levels,nrow(level))
     for(i in 1:nrow(level)){
       filename<-paste(path,mstone,"/",lv,"/",i,".txt",sep="")
       write(level$Description[i],file=filename)
     }  
   }
-  #names(dat_lv0)<-tolower(names(dat_lv0))
-  #names(dat_lv15)<-tolower(names(dat_lv15))
-  #write.csv(dat_lv0,file=paste(outpath,"dat_lv0.csv",sep=""),row.names=FALSE)
-  #write.csv(dat_lv15,file=paste(outpath,"dat_lv15.csv",sep=""),row.names=FALSE)
+
   
   # clean text
   
   cleanCorpus<-function(corpus){
     corpus.tmp<-tm_map(corpus,removePunctuation)
     corpus.tmp<-tm_map(corpus.tmp,stripWhitespace)
-    #corpus.tmp<-tm_map(corpus.tmp,tolower)
     corpus.tmp<-tm_map(corpus.tmp,content_transformer(tolower))
     corpus.tmp<-tm_map(corpus.tmp,removeWords, stopwords("english"))
     corpus.tmp<-Corpus(VectorSource(corpus.tmp))
@@ -73,10 +73,8 @@ mstone<-"2013-05-01"
   
   tdm=lapply(c("1","2","3","4","5") , generateTDM,path=paste(path,mstone,sep=""))
   tdm0=lapply(c("0") , generateTDM,path=paste(path,mstone,sep=""))
-  
-  str(tdm)
-  str(tdm0)
-  
+  # analysis the frequency of words in each levels.
+
   
   # attch name
   bindCandidatetoTDM<-function(tdm){
@@ -88,10 +86,10 @@ mstone<-"2013-05-01"
   }
   
   candTDM <- lapply(tdm,bindCandidatetoTDM)
-  str(candTDM)
+ 
   
   candTDM0 <- lapply(tdm0,bindCandidatetoTDM)
-  str(candTDM0)
+
   
   # stack 
   tdm.stack <- do.call(rbind.fill,candTDM)
@@ -124,9 +122,6 @@ mstone<-"2013-05-01"
       kknn.pred<-kknn.ordinal(targetCandidate~., train.kknn,valid.cand.nl,distance =2,k=7,kernel = "triangular",param=pp)
       
       fit.test <- fitted(kknn.pred)
-      #conf.mat<-table("Predictions"= fit.test,Actual=valid.cand)
-      #accuracy<-sum(diag(conf.mat)/length(valid.idx)*100)
-      #accuracy.stack<-c(accuracy.stack,accuracy)
       
       tmp<-sum((as.numeric(fit.test)-as.numeric(valid.cand))!=0)/length(valid.idx)
       tmp2<-sum(abs(as.numeric(fit.test)-as.numeric(valid.cand)))/length(valid.idx)
@@ -135,9 +130,7 @@ mstone<-"2013-05-01"
       accuracy2.stack<-c(accuracy2.stack,tmp2)
       
     }
-    #opt.alpha<-alphas[c(1:length(accuracy.stack))[accuracy.stack==max(accuracy.stack)]]
-    #if(length(opt.alpha)>1) opt.alpha<-min(opt.alpha)#opt.alpha[sample(1:length(opt.alpha),1)]
-    
+  
     return(accuracy.stack)
   }
   
@@ -150,28 +143,27 @@ mstone<-"2013-05-01"
     }
 
     leaveoneout2<-ldply(list.train,cvkknn,train)
-    #leaveoneout2<-lapply(c(1:nrow(train)),cvkknn,train)
     errors<-colMeans(leaveoneout2)
     names(errors)<-seq(0.3,0.6,0.01)
     out<-seq(0.3,0.6,0.01)[errors==min(errors)]
     
     return(out[1])
-    #return(mean(unlist(leaveoneout2)))
+   # return the alph which has the minimum error
   }
   
   knn.accuracy=c()
   avg.accuracy=c()
   opt.accuracy=c()
-  mat.5=list()#matrix(0,5,5)
+  mat.5=list()
   mat.opt=list()
   optalphastack<-c()
 
-  for(nn in 321:350){
+  for(nn in 1:100){
     
-    #print(nn)
-    train.idx<-sample(nrow(tdm.stack), ceiling(nrow(tdm.stack)*0.7))
+    
+    train.idx<-sample(nrow(tdm.stack), ceiling(nrow(tdm.stack)*0.7)
     test.idx<-(1:nrow(tdm.stack)) [-train.idx]
-    
+    # 70% of data is divided into train set, and the rest is divided into test set
     
     tdm.stack$targetCandidate<-ordered(tdm.stack$targetCandidate)
     
@@ -192,19 +184,19 @@ mstone<-"2013-05-01"
     knn.pred<-knn(train.cand.nl,test.cand.nl,train.cand)
     conf.knn<-table("Predictions"= knn.pred,Actual=test.cand)
     accuracy.knn<-sum(diag(conf.knn)/length(test.idx)*100)    
+    #calculate the accuracy in knn method
     
-    
-    kknn.opt<-kknn.ordinal(targetCandidate~., train.kknn,test.cand.nl,distance =2,k=7,kernel = "triangular",param=opt.alpha)#opt.alpha)
+    kknn.opt<-kknn.ordinal(targetCandidate~., train.kknn,test.cand.nl,distance =2,k=7,kernel = "triangular",param=opt.alpha)
     fit.opt <- fitted(kknn.opt)
     conf.opt<-table("Predictions"= fit.opt,Actual=test.cand)
     accuracy.opt<-sum(diag(conf.opt)/length(test.idx)*100)    
-    
+    #calculate the accuracy the awknn
     
     kknn.5<-kknn.ordinal(targetCandidate~., train.kknn,test.cand.nl,distance =2,k=7,kernel = "triangular",param=0.5)
     fit.test5 <- fitted(kknn.5)
     conf.mat5<-table("Predictions"= fit.test5,Actual=test.cand)
     accuracy5<-sum(diag(conf.mat5)/length(test.idx)*100)
-    
+    #calculate the accuracy the wknn
 
     
     mat.5[[nn]]<-conf.mat5
@@ -219,23 +211,20 @@ mstone<-"2013-05-01"
     
   }
 
-  tmp<-cbind(avg.accuracy,opt.accuracy,c(1:350))
-  tmp2<-tmp[order(tmp[,1]-tmp[,2]),]
-  
-  #tmp2<-tmp[order(tmp[,2],decreasing=T),]
-  tmp3<-tmp2[1:100,]
-  colMeans(tmp3) #79.73308     80.93233
-  idx<-tmp3[,3]
+  tmp<-cbind(avg.accuracy,opt.accuracy,c(1:350)
+  colMeans(tmp) #79.73308     80.93233
 
-  postscript("optalpha.eps",width = 6.0, height = 6.0, horizontal = FALSE, onefile = FALSE, paper = "special")
-  hh<-hist(optalphastack[idx],breaks =seq(0.175,0.8,0.05),xlab=substitute(alpha),main="",cex.lab=1.5)
+
+  postscript(paste(path,"/output/optalpha.eps",sep=""),width = 6.0, height = 6.0, horizontal = FALSE, onefile = FALSE, paper = "special")
+ # make the eps file in output folder
+  hh<-hist(optalphastack,breaks =seq(0.175,0.8,0.05),xlab=substitute(alpha),main="",cex.lab=1.5)
   dev.off()
   histsumm<-cbind(hh$mids,hh$counts)
   
   
-  acc<-cbind(kNN=knn.accuracy[1:100],wkNN=tmp3[,1],"Adaptive wkNN"=tmp3[,2])
+  acc<-cbind(kNN=knn.accuracy[1:100],wkNN=tmp[,1],"Adaptive wkNN"=tmp[,2])
   
-  postscript("boxplot.eps",width = 6.0, height = 6.0, horizontal = FALSE, onefile = FALSE, paper = "special")
+  postscript(paste(path,"/output/boxplot.eps",sep=""),width = 6.0, height = 6.0, horizontal = FALSE, onefile = FALSE, paper = "special")           
   boxplot(as.data.frame(acc),ylab="Accuracy",cex.lab=1.5)
   dev.off()
   
